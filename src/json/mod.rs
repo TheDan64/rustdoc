@@ -7,8 +7,7 @@ pub use self::api::*;
 use std::collections::HashMap;
 use std::sync::mpsc;
 
-use analysis::{self, AnalysisHost, DefKind};
-use rayon::prelude::*;
+use analysis::{AnalysisHost, DefKind};
 use serde_json;
 
 use error::*;
@@ -35,7 +34,7 @@ pub fn create_json(host: &AnalysisHost, crate_name: &str) -> Result<String> {
 
     // Now that we have that, it's time to get the children; these are
     // the top-level items for the crate.
-    let ids = host.for_each_child_def(root_id, |id, def| {
+    let ids = host.for_each_child_def(root_id, |id, _def| {
         id
     }).unwrap();
 
@@ -49,42 +48,25 @@ pub fn create_json(host: &AnalysisHost, crate_name: &str) -> Result<String> {
     for id in ids {
         sender.send(id).unwrap();
     }
+
+    // the loop below is basically creating this vector
+    let mut included: Vec<Document> = Vec::new();
+    
+    // this is probably the wrong spot for this
+    let mut relationships: HashMap<String, Vec<Data>> = HashMap::with_capacity(METADATA_SIZE);
     
     while let Ok(id) = receiver.try_recv() {
+        // push each child to be processed itself
+        host.for_each_child_def(id, |id, _def| {
+            sender.send(id).unwrap();
+        })?;
+
+        // process this one
+
         // question: we could do this by cloning it in the call to for_each_child_def
         // above/below; is that cheaper, or is this cheaper?
         let def = host.get_def(id).unwrap();
 
-        println!("working on {} ({})", def.name, id); 
-        
-        host.for_each_child_def(id, |id, _def| {
-            sender.send(id).unwrap();
-        });
-    }
-
-/*
-    fn recur(id: &analysis::Id, host: &AnalysisHost) -> Vec<analysis::Def> {
-        let mut ids = Vec::new();
-        let mut defs = host.for_each_child_def(*id, |id, def| {
-            ids.push(id);
-            def.clone()
-        }).unwrap();
-
-        let child_defs: Vec<analysis::Def> = ids.into_par_iter()
-            .map(|id: analysis::Id| recur(&id, host))
-            .reduce(Vec::default, |mut a: Vec<analysis::Def>,
-             b: Vec<analysis::Def>| {
-                a.extend(b);
-                a
-            });
-        defs.extend(child_defs);
-        defs
-    }
-
-    let mut included: Vec<Document> = Vec::new();
-    //let mut relationships: HashMap<String, Vec<Data>> = HashMap::with_capacity(METADATA_SIZE);
-
-    for def in recur(&root_id, host) {
         let (ty, relations_key) = match def.kind {
             DefKind::Mod => (String::from("module"), String::from("modules")),
             DefKind::Struct => (String::from("struct"), String::from("structs")),
@@ -122,7 +104,4 @@ pub fn create_json(host: &AnalysisHost, crate_name: &str) -> Result<String> {
             included,
         ),
     )?)
-    */
-
-    Ok(String::from("lol"))
 }
