@@ -15,6 +15,7 @@ extern crate open;
 extern crate rayon;
 extern crate rls_analysis as analysis;
 extern crate serde;
+extern crate notify;
 
 pub mod assets;
 pub mod cargo;
@@ -28,10 +29,13 @@ pub use json::create_json;
 use std::fs::{self, File};
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::channel;
+use std::time::Duration;
 
 use assets::Asset;
 use cargo::Target;
 use error::*;
+use notify::{Watcher, RecursiveMode, watcher};
 use ui::Ui;
 
 pub use error::{Error, ErrorKind};
@@ -166,5 +170,39 @@ fn generate_and_load_analysis(config: &Config, target: &Target) -> Result<()> {
 
     drop(task);
 
+    Ok(())
+}
+
+/// Watches a certain path and its subdirectories, ignoring a set of sub directores if provided,
+/// running a callback when detecting any sort of change.
+///
+/// ## Arguments
+///
+/// - `path`: FIXME
+/// - `ignore`: FIXME
+/// - `callback`: FIXME
+pub fn watch<F: Fn() -> Result<()>>(path: &Path, ignore: &[&Path], callback: F) -> Result<()> {
+    let (tx, rx) = channel();
+
+    let mut watcher = watcher(tx, Duration::from_secs(10))?;
+
+    watcher.watch(path, RecursiveMode::Recursive)?;
+
+    loop {
+        match rx.recv() {
+            Ok(event) => println!("{:?}", event),
+            Err(e) => println!("{:?}", e),
+        }
+    }
+}
+
+/// FIXME
+///
+/// ## Arguments
+///
+/// - `path`: FIXME
+/// - `ignore`: FIXME
+/// - `callback`: FIXME
+pub fn serve(path: &Path) -> Result<()> {
     Ok(())
 }

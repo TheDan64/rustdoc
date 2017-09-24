@@ -7,7 +7,7 @@ extern crate clap;
 
 use clap::{App, Arg, SubCommand};
 
-use rustdoc::{build, Config, Verbosity};
+use rustdoc::{build, serve, watch, Config, Verbosity};
 
 use std::io::{Write, stderr};
 use std::process;
@@ -55,6 +55,26 @@ fn run() -> rustdoc::error::Result<()> {
         .subcommand(SubCommand::with_name("open").about(
             "opens the documentation in a web browser",
         ))
+        .subcommand(
+            SubCommand::with_name("serve")
+                .about("Builds and serves docs while watching for changes")
+                .arg(
+                    Arg::with_name("artifacts")
+                        .long("emit")
+                        .use_delimiter(true)
+                        .takes_value(true)
+                        .possible_values(ALL_ARTIFACTS)
+                        .default_value(&joined_artifacts)
+                        .help("Build artifacts to produce. Defaults to everything."),
+                )
+                .arg(Arg::with_name("watch").short("w").long("watch").help(
+                    "Watches for changes and serves the rebuilt docs"
+                ))
+                .arg(Arg::with_name("open").short("o").long("open").help(
+                    "Open the docs in a web browser after building and serving"
+                )
+            )
+        )
         .get_matches();
 
     // unwrap is okay because we take a default value
@@ -83,6 +103,29 @@ fn run() -> rustdoc::error::Result<()> {
                 build(&config, ALL_ARTIFACTS)?;
             }
             config.open_docs()?;
+        }
+        ("serve", Some(matches)) => {
+            let artifacts: Vec<&str> = matches.values_of("artifacts").unwrap().collect();
+
+            build(&config, &artifacts)?;
+
+            if matches.is_present("open") {
+                config.open_docs()?;
+            }
+
+            serve(&config.output_path())?;
+
+            if matches.is_present("watch") {
+                println!("Starting thread with file monitor");
+
+                watch(config.root_path(), &[&config.output_path()], || {
+                    build(&config, &artifacts)?;
+
+                    println!("Docs have been successfully rebuilt.");
+
+                    Ok(())
+                })?;
+            }
         }
         // default is to build
         _ => build(&config, ALL_ARTIFACTS)?,

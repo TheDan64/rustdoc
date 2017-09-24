@@ -29,5 +29,7 @@ error_chain! {
             #[doc = "`serde_json::Error` converted to an error-chain variant"];
         Analysis(::analysis::AError)
             #[doc = "`analysis::AError` converted to an error-chain variant"];
+        Notify(::notify::Error)
+            #[doc = "`notify::Error` converted to an error-chain variant"];
     }
 }
